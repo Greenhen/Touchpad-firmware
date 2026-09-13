@@ -13,7 +13,11 @@ olvas_index = 0
 ertek = 0
 idle = False
 tulcsordulas_db = 0
-PUFFER_MERET = 4
+start_hiba_db = 0
+parity_hiba_db = 0
+stop_hiba_db = 0
+PUFFER_MERET = 16
+MAX_OLVASAS = 4
 puffer = [None] * PUFFER_MERET
 
 
@@ -27,7 +31,7 @@ IRQ:
 '''
 
 def clock_esemeny(pin):
-    global ertek, bit_sorszam, allapot, idle, ir_index, szamlalo, tulcsordulas_db
+    global ertek, bit_sorszam, allapot, idle, ir_index, szamlalo, tulcsordulas_db,start_hiba_db,parity_hiba_db,stop_hiba_db
     bit = data.value()
     if allapot == "start várás":
         if bit_sorszam == 0:
@@ -36,6 +40,7 @@ def clock_esemeny(pin):
                 bit_sorszam += 1
             else:
                 allapot = "szinkron keresés"
+                start_hiba_db += 1
                 idle = False
     elif allapot == "frame fogadás":
         if bit_sorszam > 0 and bit_sorszam < 9:
@@ -51,6 +56,7 @@ def clock_esemeny(pin):
                 bit_sorszam = 0
                 szamlalo = 0
                 ertek = 0
+                parity_hiba_db += 1
                 idle = False
         elif bit_sorszam == 10:
             if bit == 1:
@@ -69,6 +75,7 @@ def clock_esemeny(pin):
                 bit_sorszam = 0
                 szamlalo = 0
                 ertek = 0
+                stop_hiba_db += 1
                 idle = False
 
 
@@ -78,7 +85,7 @@ clock.irq(
 )
 
 while True:
-    byte = None
+    feldolgozott_db = 0
     aktualis_clock = clock.value()
     aktualis_data = data.value()
     if allapot == "szinkron keresés":
@@ -94,14 +101,39 @@ while True:
                     idle = False
         if aktualis_clock == 0 or aktualis_data == 0:
             idle = False
-    irq_allapot = machine.disable_irq()
-    if ir_index != olvas_index:
-        byte = puffer[olvas_index]
-        olvas_index = (olvas_index + 1) % PUFFER_MERET
-    tulcsordulas = tulcsordulas_db
-    tulcsordulas_db = 0
-    machine.enable_irq(irq_allapot)
-    if byte is not None:
+    while feldolgozott_db < MAX_OLVASAS:
+        byte = None
+        irq_allapot = machine.disable_irq()
+        if ir_index != olvas_index:
+            byte = puffer[olvas_index]
+            olvas_index = (olvas_index + 1) % PUFFER_MERET
+        machine.enable_irq(irq_allapot)
+        if byte is None:
+            break
         print(byte)
-    if tulcsordulas > 0:
-        print(f"Puffer túlcsordulás {tulcsordulas} alkalommal")
+        feldolgozott_db += 1
+        
+    irq_allapot = machine.disable_irq()
+    
+    start_hibak = start_hiba_db
+    parity_hibak = parity_hiba_db
+    stop_hibak = stop_hiba_db
+    tulcsordulas = tulcsordulas_db
+    start_hiba_db = 0
+    parity_hiba_db = 0
+    stop_hiba_db = 0
+    tulcsordulas_db = 0
+
+    machine.enable_irq(irq_allapot)
+        
+    if start_hibak > 0:
+    print(f"START hiba: {start_hibak}")
+
+    if parity_hibak > 0:
+        print(f"Parity hiba: {parity_hibak}")
+
+    if stop_hibak > 0:
+        print(f"STOP hiba: {stop_hibak}")
+
+    if tulcsordulasok > 0:
+        print(f"Puffer túlcsordulás: {tulcsordulasok}")
