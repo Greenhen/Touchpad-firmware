@@ -19,6 +19,7 @@ stop_hiba_db = 0
 PUFFER_MERET = 16
 MAX_OLVASAS = 4
 puffer = [None] * PUFFER_MERET
+aktualis_csomag = []
 
 
 '''
@@ -78,6 +79,69 @@ def clock_esemeny(pin):
                 stop_hiba_db += 1
                 idle = False
 
+def allapotbyte_ervenyes(byte):
+    ervenyes = (byte & (1 << 3)) != 0
+    return ervenyes
+
+def gombok_kiolvasasa(csomag):
+    allapot_byte = csomag[0]
+
+    bal_gomb = (allapot_byte & (1 << 0)) != 0
+    jobb_gomb = (allapot_byte & (1 << 1)) != 0
+    kozepso_gomb = (allapot_byte & (1 << 2)) != 0
+
+    return bal_gomb, jobb_gomb, kozepso_gomb
+
+def tulcsordulas(byte):
+    x_tulcsordulas = (byte & (1 << 6)) != 0
+    y_tulcsordulas = (byte & (1 << 7)) != 0
+
+    return x_tulcsordulas, y_tulcsordulas
+
+def elojelesse_alakit(byte, negativ):
+    if negativ:
+        byte = byte - 256
+
+    return byte
+
+def mozgas_kiolvasasa(csomag):
+    allapot_byte = csomag[0]
+
+    x_tulcsordulas, y_tulcsordulas = tulcsordulas(allapot_byte)
+
+    if x_tulcsordulas or y_tulcsordulas:
+        return None, None
+
+    x_negativ = (allapot_byte & (1 << 4)) != 0
+    y_negativ = (allapot_byte & (1 << 5)) != 0
+
+    x = elojelesse_alakit(csomag[1], x_negativ)
+    y = elojelesse_alakit(csomag[2], y_negativ)
+
+    return x, y
+
+def csomag_feldolgozas(csomag):
+    bal_gomb, jobb_gomb, kozepso_gomb = gombok_kiolvasasa(csomag)
+    x, y = mozgas_kiolvasasa(csomag)
+
+    return bal_gomb, jobb_gomb, kozepso_gomb, x, y
+
+def byte_feldolgozas(byte):
+    global aktualis_csomag
+
+    if len(aktualis_csomag) == 0:
+        if not allapotbyte_ervenyes(byte):
+            return None
+
+    aktualis_csomag.append(byte)
+
+    if len(aktualis_csomag) == 3:
+        kesz_csomag = aktualis_csomag
+        aktualis_csomag = []
+        return kesz_csomag
+
+    return None
+
 def pufferbol_olvas():
     global olvas_index
     irq_allapot = machine.disable_irq()
@@ -94,7 +158,10 @@ def puffer_feldolgozas():
         byte=pufferbol_olvas()
         if byte is None:
             break
-        print(f"bit érték: {byte}")
+        kesz_csomag = byte_feldolgozas(byte)
+        if kesz_csomag is not None:
+            print(csomag_feldolgozas(kesz_csomag))
+
 
 clock.irq(
     trigger=Pin.IRQ_FALLING,
@@ -119,6 +186,7 @@ while True:
             idle = False
         
     puffer_feldolgozas()
+    
         
     irq_allapot = machine.disable_irq()
     
