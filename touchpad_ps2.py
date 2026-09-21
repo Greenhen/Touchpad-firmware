@@ -154,21 +154,23 @@ def pufferbol_olvas():
     return byte
     
 def puffer_feldolgozas():
+    eredmenyek = []
     for i in range(MAX_OLVASAS):
         byte=pufferbol_olvas()
         if byte is None:
             break
         kesz_csomag = byte_feldolgozas(byte)
         if kesz_csomag is not None:
-            print(csomag_feldolgozas(kesz_csomag))
-
+            eredmenyek.append(csomag_feldolgozas(kesz_csomag))
+    return eredmenyek
 
 clock.irq(
     trigger=Pin.IRQ_FALLING,
     handler=clock_esemeny
 )
 
-while True:
+def szinkron_frissites():
+    global allapot, idle, kezdet
     aktualis_clock = clock.value()
     aktualis_data = data.value()
     if allapot == "szinkron keresés":
@@ -184,12 +186,15 @@ while True:
                     idle = False
         if aktualis_clock == 0 or aktualis_data == 0:
             idle = False
-        
-    puffer_feldolgozas()
+            
+def touchpad_frissites():
+    szinkron_frissites()
+    return puffer_feldolgozas()
     
-        
+def hibak_kiolvasasa():
+    global start_hiba_db, parity_hiba_db, stop_hiba_db, tulcsordulas_db
     irq_allapot = machine.disable_irq()
-    
+        
     start_hibak = start_hiba_db
     parity_hibak = parity_hiba_db
     stop_hibak = stop_hiba_db
@@ -198,17 +203,28 @@ while True:
     parity_hiba_db = 0
     stop_hiba_db = 0
     tulcsordulas_db = 0
-
+    
     machine.enable_irq(irq_allapot)
+    return start_hibak, parity_hibak, stop_hibak, tulcsordulas
+    
+
+if __name__ == "__main__":
         
-    if start_hibak > 0:
-        print(f"START hiba: {start_hibak}")
+    while True:
+        eredmenyek = touchpad_frissites()
+        for eredmeny in eredmenyek:
+            print(eredmeny)
+        start_hibak, parity_hibak, stop_hibak, tulcsordulas = hibak_kiolvasasa()
 
-    if parity_hibak > 0:
-        print(f"Parity hiba: {parity_hibak}")
+            
+        if start_hibak > 0:
+            print(f"START hiba: {start_hibak}")
 
-    if stop_hibak > 0:
-        print(f"STOP hiba: {stop_hibak}")
+        if parity_hibak > 0:
+            print(f"Parity hiba: {parity_hibak}")
 
-    if tulcsordulas > 0:
-        print(f"Puffer túlcsordulás: {tulcsordulas}")
+        if stop_hibak > 0:
+            print(f"STOP hiba: {stop_hibak}")
+
+        if tulcsordulas > 0:
+            print(f"Puffer túlcsordulás: {tulcsordulas}")
